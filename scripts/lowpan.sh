@@ -10,10 +10,12 @@ SHORT_ADDR=0xbee$INSTANCE
 echo 'Using phy' $PHY 'channel' $CHAN 'PAN ID' $PAN
 echo 'IP:' $IP_ADDR 'Short:' $SHORT_ADDR
 
+ip link set wpan0 down
 iwpan dev wpan0 set pan_id $PAN
-iwpan dev wpan0 set short_addr $INSTANCE
+iwpan dev wpan0 set short_addr $SHORT_ADDR
 iwpan phy $PHY set channel 0 $CHAN
 ip link add link wpan0 name lowpan0 type lowpan
 ip link set wpan0 up
 ip link set lowpan0 up
 ip -6 addr add $IP_ADDR dev lowpan0
+

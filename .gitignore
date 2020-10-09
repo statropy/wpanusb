@@ -5,3 +5,5 @@
 Module.symvers
 modules.order
 *.mod.c
+*.a
+*.mod
