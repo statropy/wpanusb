@@ -8,7 +8,7 @@
  */
 
 #define WPANUSB_VENDOR_ID	0x2fe3
-#define WPANUSB_PRODUCT_ID	0x0101
+#define WPANUSB_PRODUCT_ID	0x000d
 
 enum wpanusb_requests {
 	RESET,

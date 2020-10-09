@@ -18,6 +18,7 @@
 #include <net/cfg802154.h>
 #include <net/mac802154.h>
 
+#define DEBUG
 #include "wpanusb.h"
 
 #define WPANUSB_NUM_RX_URBS	4	/* allow for a bit of local latency */
@@ -255,7 +256,7 @@ static int wpanusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 {
 	struct wpanusb *wpanusb = hw->priv;
 	struct usb_device *udev = wpanusb->udev;
-	int ret;
+	int ret = 0;
 
 	dev_dbg(&udev->dev, "len %u", skb->len);
 
@@ -584,9 +585,12 @@ static int wpanusb_probe(struct usb_interface *interface,
 		goto fail;
 	}
 
+	dev_dbg(&udev->dev, "ieee802154 ready to go");
+
 	return 0;
 
 fail:
+	dev_err(&udev->dev, "Failed ieee802154 probe");
 	wpanusb_free_urbs(wpanusb);
 	usb_kill_urb(wpanusb->tx_urb);
 	usb_free_urb(wpanusb->tx_urb);
