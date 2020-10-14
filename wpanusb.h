@@ -27,6 +27,7 @@ enum wpanusb_requests {
 	SET_CSMA_PARAMS,
 	SET_PROMISCUOUS_MODE,
 	GET_EXTENDED_ADDR,
+	GET_CAPABILITIES,
 };
 
 struct set_channel {

@@ -437,6 +437,54 @@ static int wpanusb_set_extended_addr(struct ieee802154_hw *hw)
 	return ret;
 }
 
+/* FIXME: these need to come as capabilities from the device */
+static const s32 wpanusb_powers[] = {
+	300, 280, 230, 180, 130, 70, 0, -100, -200, -300, -400, -500, -700,
+	-900, -1200, -1700,
+};
+
+static int wpanusb_get_device_capabilities(struct ieee802154_hw *hw)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	unsigned char *buffer;
+	int ret = 0;
+
+	buffer = kmalloc(IEEE802154_EXTENDED_ADDR_LEN, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), GET_EXTENDED_ADDR, buffer,
+					IEEE802154_EXTENDED_ADDR_LEN);
+	if (ret < 0) {
+		dev_err(&udev->dev, "failed to fetch extended address, random address set\n");
+		ieee802154_random_extended_addr(&wpanusb->hw->phy->perm_extended_addr);
+		kfree(buffer);
+		return ret;
+	}
+
+	/* FIXME: these need to come from device capabilities */
+	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT |
+		    IEEE802154_HW_PROMISCUOUS;
+
+	/* FIXME: these need to come from device capabilities */
+	hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
+
+	/* Set default and supported channels */
+	hw->phy->current_page = 0;
+	hw->phy->current_channel = 11;
+	/* FIXME: these need to come from device capabilities */
+	hw->phy->supported.channels[0] = WPANUSB_VALID_CHANNELS;
+
+	/* FIXME: these need to come from device capabilities */
+	hw->phy->supported.tx_powers = wpanusb_powers;
+	hw->phy->supported.tx_powers_size = ARRAY_SIZE(wpanusb_powers);
+	hw->phy->transmit_power = hw->phy->supported.tx_powers[0];
+
+	kfree(buffer);
+	return ret;
+}
+
 static int wpanusb_start(struct ieee802154_hw *hw)
 {
 	struct wpanusb *wpanusb = hw->priv;
@@ -470,13 +518,6 @@ static void wpanusb_stop(struct ieee802154_hw *hw)
 	if (ret < 0)
 		dev_err(&udev->dev, "Failed to stop ieee802154");
 }
-
-
-/* FIXME: these need to come as capabilities from the device */
-static const s32 wpanusb_powers[] = {
-	300, 280, 230, 180, 130, 70, 0, -100, -200, -300, -400, -500, -700,
-	-900, -1200, -1700,
-};
 
 static int wpanusb_set_txpower(struct ieee802154_hw *hw, s32 mbm)
 {
@@ -595,28 +636,18 @@ static int wpanusb_probe(struct usb_interface *interface,
 		goto fail;
 
 	hw->parent = &udev->dev;
-	/* FIXME: these need to come from device capabilities */
-	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT |
-		    IEEE802154_HW_PROMISCUOUS;
-
-	/* FIXME: these need to come from device capabilities */
-	hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
-
-	/* Set default and supported channels */
-	hw->phy->current_page = 0;
-	hw->phy->current_channel = 11;
-	/* FIXME: these need to come from device capabilities */
-	hw->phy->supported.channels[0] = WPANUSB_VALID_CHANNELS;
-
-	/* FIXME: these need to come from device capabilities */
-	hw->phy->supported.tx_powers = wpanusb_powers;
-	hw->phy->supported.tx_powers_size = ARRAY_SIZE(wpanusb_powers);
-	hw->phy->transmit_power = hw->phy->supported.tx_powers[0];
 
 	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), RESET,
 				   NULL, 0);
 	if (ret < 0) {
 		dev_err(&udev->dev, "Failed to RESET ieee802154");
+		goto fail;
+	}
+
+	ret = wpanusb_get_device_capabilities(hw);
+
+	if (ret < 0) {
+		dev_err(&udev->dev, "Failed to get device capabilities");
 		goto fail;
 	}
 
