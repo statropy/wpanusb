@@ -400,6 +400,43 @@ static int wpanusb_set_hw_addr_filt(struct ieee802154_hw *hw,
 	return ret;
 }
 
+static int wpanusb_set_extended_addr(struct ieee802154_hw *hw)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	unsigned char *buffer;
+	__le64 extended_addr;
+	int ret = 0;
+	u64 addr;
+
+	buffer = kmalloc(IEEE802154_EXTENDED_ADDR_LEN, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), GET_EXTENDED_ADDR, buffer,
+					IEEE802154_EXTENDED_ADDR_LEN);
+	if (ret < 0) {
+		dev_err(&udev->dev, "failed to fetch extended address, random address set\n");
+		ieee802154_random_extended_addr(&wpanusb->hw->phy->perm_extended_addr);
+		kfree(buffer);
+		return ret;
+	}
+
+	memcpy(&extended_addr, buffer, IEEE802154_EXTENDED_ADDR_LEN);
+	/* Check if read address is not empty and the unicast bit is set correctly */
+	if (!ieee802154_is_valid_extended_unicast_addr(extended_addr)) {
+		dev_info(&udev->dev, "no permanent extended address found, random address set\n");
+		ieee802154_random_extended_addr(&wpanusb->hw->phy->perm_extended_addr);
+	} else {
+		wpanusb->hw->phy->perm_extended_addr = extended_addr;
+		addr = swab64((__force u64)wpanusb->hw->phy->perm_extended_addr);
+		dev_info(&udev->dev, "Read permanent extended address %8phC from device\n", &addr);
+	}
+
+	kfree(buffer);
+	return ret;
+}
+
 static int wpanusb_start(struct ieee802154_hw *hw)
 {
 	struct wpanusb *wpanusb = hw->priv;
@@ -576,13 +613,17 @@ static int wpanusb_probe(struct usb_interface *interface,
 	hw->phy->supported.tx_powers_size = ARRAY_SIZE(wpanusb_powers);
 	hw->phy->transmit_power = hw->phy->supported.tx_powers[0];
 
-	/* FIXME: check if device provides address first, before using random */
-	ieee802154_random_extended_addr(&hw->phy->perm_extended_addr);
-
 	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), RESET,
 				   NULL, 0);
 	if (ret < 0) {
 		dev_err(&udev->dev, "Failed to RESET ieee802154");
+		goto fail;
+	}
+
+	ret = wpanusb_set_extended_addr(hw);
+
+	if (ret < 0) {
+		dev_err(&udev->dev, "Failed to set permanent address");
 		goto fail;
 	}
 
