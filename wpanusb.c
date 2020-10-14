@@ -434,6 +434,8 @@ static void wpanusb_stop(struct ieee802154_hw *hw)
 		dev_err(&udev->dev, "Failed to stop ieee802154");
 }
 
+
+/* FIXME: these need to come as capabilities from the device */
 static const s32 wpanusb_powers[] = {
 	300, 280, 230, 180, 130, 70, 0, -100, -200, -300, -400, -500, -700,
 	-900, -1200, -1700,
@@ -556,20 +558,25 @@ static int wpanusb_probe(struct usb_interface *interface,
 		goto fail;
 
 	hw->parent = &udev->dev;
+	/* FIXME: these need to come from device capabilities */
 	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT |
 		    IEEE802154_HW_PROMISCUOUS;
 
+	/* FIXME: these need to come from device capabilities */
 	hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
 
 	/* Set default and supported channels */
 	hw->phy->current_page = 0;
 	hw->phy->current_channel = 11;
+	/* FIXME: these need to come from device capabilities */
 	hw->phy->supported.channels[0] = WPANUSB_VALID_CHANNELS;
 
+	/* FIXME: these need to come from device capabilities */
 	hw->phy->supported.tx_powers = wpanusb_powers;
 	hw->phy->supported.tx_powers_size = ARRAY_SIZE(wpanusb_powers);
 	hw->phy->transmit_power = hw->phy->supported.tx_powers[0];
 
+	/* FIXME: check if device provides address first, before using random */
 	ieee802154_random_extended_addr(&hw->phy->perm_extended_addr);
 
 	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), RESET,
