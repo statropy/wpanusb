@@ -552,6 +552,32 @@ static int wpanusb_set_cca_mode(struct ieee802154_hw *hw,
 	return 0;
 }
 
+static int wpanusb_set_lbt(struct ieee802154_hw *hw, bool on)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	int ret = 0;
+
+	if (on)
+		ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0),
+				   SET_LBT, NULL, 0);
+
+	return ret;
+}
+
+static int wpanusb_set_frame_retries(struct ieee802154_hw *hw, s8 retries)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	int ret;
+
+	/* FIXME pass retries onwards to device */
+	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0),
+				   SET_FRAME_RETRIES, NULL, 0);
+
+	return ret;
+}
+
 static int wpanusb_set_cca_ed_level(struct ieee802154_hw *hw, s32 mbm)
 {
 	struct wpanusb *wpanusb = hw->priv;
@@ -593,9 +619,11 @@ static const struct ieee802154_ops wpanusb_ops = {
 	.stop			= wpanusb_stop,
 	.set_hw_addr_filt	= wpanusb_set_hw_addr_filt,
 	.set_txpower		= wpanusb_set_txpower,
+	.set_lbt		= wpanusb_set_lbt,
 	.set_cca_mode		= wpanusb_set_cca_mode,
 	.set_cca_ed_level	= wpanusb_set_cca_ed_level,
 	.set_csma_params	= wpanusb_set_csma_params,
+	.set_frame_retries	= wpanusb_set_frame_retries,
 	.set_promiscuous_mode	= wpanusb_set_promiscuous_mode,
 };
 
