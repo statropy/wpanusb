@@ -46,7 +46,12 @@ There is a script helping to configure 6lowpan address
 
 .. code-block:: console
 
-  $ sudo scripts/lowpan.sh
+  $ sudo scripts/lowpan.sh <last octect of IP address> <channel> <pan_id>
+  
+  $ sudo scripts/lowpan.sh 2 5 && ip -6 monitor dev lowpan0 
+
+Creates lowpan0 with IP address 2001:db8::2, short address 0xbee2, pan id 0xabcd using channel 5.
+The monitor will show the status of routes on lowpan0
 
 lowpan0 network device should appear and IPv6 address can be checked with
 

@@ -10,6 +10,9 @@
 #define WPANUSB_VENDOR_ID	0x2fe3
 #define WPANUSB_PRODUCT_ID	0x0101
 
+#define BEAGLECONNECT_VENDOR_ID  0x2047
+#define BEAGLECONNECT_PRODUCT_ID 0x0aa5
+
 enum wpanusb_requests {
 	RESET,
 	TX,
@@ -25,7 +28,11 @@ enum wpanusb_requests {
 	SET_CCA_MODE,
 	SET_CCA_ED_LEVEL,
 	SET_CSMA_PARAMS,
+	SET_LBT,
+	SET_FRAME_RETRIES,
 	SET_PROMISCUOUS_MODE,
+	GET_EXTENDED_ADDR,
+	GET_CAPABILITIES,
 };
 
 struct set_channel {
@@ -44,3 +51,4 @@ struct set_pan_id {
 struct set_ieee_addr {
 	__le64 ieee_addr;
 } __packed;
+
