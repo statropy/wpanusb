@@ -26,7 +26,7 @@
 
 #define VENDOR_OUT		(USB_TYPE_VENDOR | USB_DIR_OUT)
 
-#define WPANUSB_VALID_CHANNELS	(0x07FFF800)
+#define WPANUSB_VALID_CHANNELS	(0x07FFFFFF)
 
 struct wpanusb {
 	struct ieee802154_hw *hw;
@@ -400,6 +400,91 @@ static int wpanusb_set_hw_addr_filt(struct ieee802154_hw *hw,
 	return ret;
 }
 
+static int wpanusb_set_extended_addr(struct ieee802154_hw *hw)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	unsigned char *buffer;
+	__le64 extended_addr;
+	int ret = 0;
+	u64 addr;
+
+	buffer = kmalloc(IEEE802154_EXTENDED_ADDR_LEN, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), GET_EXTENDED_ADDR, buffer,
+					IEEE802154_EXTENDED_ADDR_LEN);
+	if (ret < 0) {
+		dev_err(&udev->dev, "failed to fetch extended address, random address set\n");
+		ieee802154_random_extended_addr(&wpanusb->hw->phy->perm_extended_addr);
+		kfree(buffer);
+		return ret;
+	}
+
+	memcpy(&extended_addr, buffer, IEEE802154_EXTENDED_ADDR_LEN);
+	/* Check if read address is not empty and the unicast bit is set correctly */
+	if (!ieee802154_is_valid_extended_unicast_addr(extended_addr)) {
+		dev_info(&udev->dev, "no permanent extended address found, random address set\n");
+		ieee802154_random_extended_addr(&wpanusb->hw->phy->perm_extended_addr);
+	} else {
+		wpanusb->hw->phy->perm_extended_addr = extended_addr;
+		addr = swab64((__force u64)wpanusb->hw->phy->perm_extended_addr);
+		dev_info(&udev->dev, "Read permanent extended address %8phC from device\n", &addr);
+	}
+
+	kfree(buffer);
+	return ret;
+}
+
+/* FIXME: these need to come as capabilities from the device */
+static const s32 wpanusb_powers[] = {
+	300, 280, 230, 180, 130, 70, 0, -100, -200, -300, -400, -500, -700,
+	-900, -1200, -1700,
+};
+
+static int wpanusb_get_device_capabilities(struct ieee802154_hw *hw)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	unsigned char *buffer;
+	int ret = 0;
+
+	buffer = kmalloc(IEEE802154_EXTENDED_ADDR_LEN, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), GET_EXTENDED_ADDR, buffer,
+					IEEE802154_EXTENDED_ADDR_LEN);
+	if (ret < 0) {
+		dev_err(&udev->dev, "failed to fetch extended address, random address set\n");
+		ieee802154_random_extended_addr(&wpanusb->hw->phy->perm_extended_addr);
+		kfree(buffer);
+		return ret;
+	}
+
+	/* FIXME: these need to come from device capabilities */
+	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT |
+		    IEEE802154_HW_PROMISCUOUS;
+
+	/* FIXME: these need to come from device capabilities */
+	hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
+
+	/* Set default and supported channels */
+	hw->phy->current_page = 0;
+	hw->phy->current_channel = 11;
+	/* FIXME: these need to come from device capabilities */
+	hw->phy->supported.channels[0] = WPANUSB_VALID_CHANNELS;
+
+	/* FIXME: these need to come from device capabilities */
+	hw->phy->supported.tx_powers = wpanusb_powers;
+	hw->phy->supported.tx_powers_size = ARRAY_SIZE(wpanusb_powers);
+	hw->phy->transmit_power = hw->phy->supported.tx_powers[0];
+
+	kfree(buffer);
+	return ret;
+}
+
 static int wpanusb_start(struct ieee802154_hw *hw)
 {
 	struct wpanusb *wpanusb = hw->priv;
@@ -434,11 +519,6 @@ static void wpanusb_stop(struct ieee802154_hw *hw)
 		dev_err(&udev->dev, "Failed to stop ieee802154");
 }
 
-static const s32 wpanusb_powers[] = {
-	300, 280, 230, 180, 130, 70, 0, -100, -200, -300, -400, -500, -700,
-	-900, -1200, -1700,
-};
-
 static int wpanusb_set_txpower(struct ieee802154_hw *hw, s32 mbm)
 {
 	struct wpanusb *wpanusb = hw->priv;
@@ -470,6 +550,32 @@ static int wpanusb_set_cca_mode(struct ieee802154_hw *hw,
 	}
 
 	return 0;
+}
+
+static int wpanusb_set_lbt(struct ieee802154_hw *hw, bool on)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	int ret = 0;
+
+	if (on)
+		ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0),
+				   SET_LBT, NULL, 0);
+
+	return ret;
+}
+
+static int wpanusb_set_frame_retries(struct ieee802154_hw *hw, s8 retries)
+{
+	struct wpanusb *wpanusb = hw->priv;
+	struct usb_device *udev = wpanusb->udev;
+	int ret;
+
+	/* FIXME pass retries onwards to device */
+	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0),
+				   SET_FRAME_RETRIES, NULL, 0);
+
+	return ret;
 }
 
 static int wpanusb_set_cca_ed_level(struct ieee802154_hw *hw, s32 mbm)
@@ -513,9 +619,11 @@ static const struct ieee802154_ops wpanusb_ops = {
 	.stop			= wpanusb_stop,
 	.set_hw_addr_filt	= wpanusb_set_hw_addr_filt,
 	.set_txpower		= wpanusb_set_txpower,
+	.set_lbt		= wpanusb_set_lbt,
 	.set_cca_mode		= wpanusb_set_cca_mode,
 	.set_cca_ed_level	= wpanusb_set_cca_ed_level,
 	.set_csma_params	= wpanusb_set_csma_params,
+	.set_frame_retries	= wpanusb_set_frame_retries,
 	.set_promiscuous_mode	= wpanusb_set_promiscuous_mode,
 };
 
@@ -556,26 +664,25 @@ static int wpanusb_probe(struct usb_interface *interface,
 		goto fail;
 
 	hw->parent = &udev->dev;
-	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT |
-		    IEEE802154_HW_PROMISCUOUS;
-
-	hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
-
-	/* Set default and supported channels */
-	hw->phy->current_page = 0;
-	hw->phy->current_channel = 11;
-	hw->phy->supported.channels[0] = WPANUSB_VALID_CHANNELS;
-
-	hw->phy->supported.tx_powers = wpanusb_powers;
-	hw->phy->supported.tx_powers_size = ARRAY_SIZE(wpanusb_powers);
-	hw->phy->transmit_power = hw->phy->supported.tx_powers[0];
-
-	ieee802154_random_extended_addr(&hw->phy->perm_extended_addr);
 
 	ret = wpanusb_control_send(wpanusb, usb_sndctrlpipe(udev, 0), RESET,
 				   NULL, 0);
 	if (ret < 0) {
 		dev_err(&udev->dev, "Failed to RESET ieee802154");
+		goto fail;
+	}
+
+	ret = wpanusb_get_device_capabilities(hw);
+
+	if (ret < 0) {
+		dev_err(&udev->dev, "Failed to get device capabilities");
+		goto fail;
+	}
+
+	ret = wpanusb_set_extended_addr(hw);
+
+	if (ret < 0) {
+		dev_err(&udev->dev, "Failed to set permanent address");
 		goto fail;
 	}
 
@@ -626,7 +733,11 @@ static const struct usb_device_id wpanusb_device_table[] = {
 		USB_DEVICE_AND_INTERFACE_INFO(WPANUSB_VENDOR_ID,
 					      WPANUSB_PRODUCT_ID,
 					      USB_CLASS_VENDOR_SPEC,
-					      0, 0)
+					      0, 0),
+                USB_DEVICE_AND_INTERFACE_INFO(BEAGLECONNECT_VENDOR_ID,
+                                                BEAGLECONNECT_PRODUCT_ID,
+                                                USB_CLASS_VENDOR_SPEC,
+                                                0, 0)
 	},
 	/* end with null element */
 	{}
