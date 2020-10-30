@@ -26,7 +26,7 @@
 
 #define VENDOR_OUT		(USB_TYPE_VENDOR | USB_DIR_OUT)
 
-#define WPANUSB_VALID_CHANNELS	(0x07FFF800)
+#define WPANUSB_VALID_CHANNELS	(0x07FFFFFF)
 
 struct wpanusb {
 	struct ieee802154_hw *hw;
@@ -733,7 +733,11 @@ static const struct usb_device_id wpanusb_device_table[] = {
 		USB_DEVICE_AND_INTERFACE_INFO(WPANUSB_VENDOR_ID,
 					      WPANUSB_PRODUCT_ID,
 					      USB_CLASS_VENDOR_SPEC,
-					      0, 0)
+					      0, 0),
+                USB_DEVICE_AND_INTERFACE_INFO(BEAGLECONNECT_VENDOR_ID,
+                                                BEAGLECONNECT_PRODUCT_ID,
+                                                USB_CLASS_VENDOR_SPEC,
+                                                0, 0)
 	},
 	/* end with null element */
 	{}

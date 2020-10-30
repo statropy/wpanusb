@@ -10,6 +10,9 @@
 #define WPANUSB_VENDOR_ID	0x2fe3
 #define WPANUSB_PRODUCT_ID	0x000d
 
+#define BEAGLECONNECT_VENDOR_ID  0x2047
+#define BEAGLECONNECT_PRODUCT_ID 0x0aa5
+
 enum wpanusb_requests {
 	RESET,
 	TX,
@@ -48,3 +51,4 @@ struct set_pan_id {
 struct set_ieee_addr {
 	__le64 ieee_addr;
 } __packed;
+
