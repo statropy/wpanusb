@@ -32,7 +32,7 @@ enum wpanusb_requests {
 	SET_FRAME_RETRIES,
 	SET_PROMISCUOUS_MODE,
 	GET_EXTENDED_ADDR,
-	GET_CAPABILITIES,
+	GET_SUPPORTED_CHANNELS,
 };
 
 struct set_channel {
