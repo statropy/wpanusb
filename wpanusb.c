@@ -25,6 +25,7 @@
 #define WPANUSB_ALLOC_DELAY_MS	100	/* delay after failed allocation */
 
 #define VENDOR_OUT		(USB_TYPE_VENDOR | USB_DIR_OUT)
+#define VENDOR_IN		(USB_TYPE_VENDOR | USB_DIR_IN)
 
 #define WPANUSB_VALID_CHANNELS	(0x07FFFFFF)
 
@@ -53,6 +54,17 @@ static int wpanusb_control_send(struct wpanusb *wpanusb, unsigned int pipe,
 	struct usb_device *udev = wpanusb->udev;
 
 	return usb_control_msg(udev, pipe, request, VENDOR_OUT,
+			       0, 0, data, size, 1000);
+}
+
+static int wpanusb_control_recv(struct wpanusb *wpanusb, u8 request, void *data, u16 size)
+{
+	struct usb_device *udev = wpanusb->udev;
+
+	usb_control_msg(udev, usb_sndctrlpipe(udev, 0), request, VENDOR_OUT,
+			       0, 0, NULL, 0, 1000);
+
+	return usb_control_msg(udev, usb_rcvbulkpipe(udev, 1), request, VENDOR_IN,
 			       0, 0, data, size, 1000);
 }
 
@@ -448,6 +460,7 @@ static int wpanusb_get_device_capabilities(struct ieee802154_hw *hw)
 	struct wpanusb *wpanusb = hw->priv;
 	struct usb_device *udev = wpanusb->udev;
 	unsigned char *buffer;
+	uint32_t valid_channels;
 	int ret = 0;
 
 	buffer = kmalloc(IEEE802154_EXTENDED_ADDR_LEN, GFP_KERNEL);
@@ -463,18 +476,31 @@ static int wpanusb_get_device_capabilities(struct ieee802154_hw *hw)
 		return ret;
 	}
 
+	buffer = kmalloc(sizeof(valid_channels), GFP_NOIO);
+	if (!buffer)
+		return -ENOMEM;
+	ret = wpanusb_control_recv(wpanusb, GET_SUPPORTED_CHANNELS, buffer,	sizeof(valid_channels));
+	if (ret != sizeof(uint32_t)) {
+		dev_err(&udev->dev, "failed to fetch supported channels\n");
+		kfree(buffer);
+		return ret;
+	}
+	valid_channels = *(uint32_t *)buffer;
+	if (!valid_channels) {
+		dev_err(&udev->dev, "failed to fetch valid channels, setting default valid channels\n");
+		valid_channels = WPANUSB_VALID_CHANNELS;
+	}
+
 	/* FIXME: these need to come from device capabilities */
-	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT |
-		    IEEE802154_HW_PROMISCUOUS;
+	hw->flags = IEEE802154_HW_TX_OMIT_CKSUM | IEEE802154_HW_AFILT;
 
 	/* FIXME: these need to come from device capabilities */
 	hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
 
 	/* Set default and supported channels */
 	hw->phy->current_page = 0;
-	hw->phy->current_channel = 11;
-	/* FIXME: these need to come from device capabilities */
-	hw->phy->supported.channels[0] = WPANUSB_VALID_CHANNELS;
+	hw->phy->current_channel = ffs(valid_channels) - 1; //set to lowest valid channel
+	hw->phy->supported.channels[0] = valid_channels;
 
 	/* FIXME: these need to come from device capabilities */
 	hw->phy->supported.tx_powers = wpanusb_powers;
